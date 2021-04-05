@@ -25,6 +25,10 @@
                 </my:file-chooser>
             </form:form>
         </div>
+        <div class="aca-input-box-header">
+            Bulk Platform Credentials Download
+            <a href="${portal}/certificate-request/bulk"><img src="${icons}/ic_file_download_black_24dp.png" title="Download Certificates"></a>
+        </div>
         <br/>
         <div class="aca-data-table">
             <table id="platformTable" class="display" width="100%">

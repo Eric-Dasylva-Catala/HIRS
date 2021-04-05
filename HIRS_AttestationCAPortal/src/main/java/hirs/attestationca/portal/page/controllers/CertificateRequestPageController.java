@@ -1,5 +1,6 @@
 package hirs.attestationca.portal.page.controllers;
 
+import hirs.FilteredRecordsList;
 import hirs.attestationca.portal.datatables.DataTableInput;
 import hirs.attestationca.portal.datatables.DataTableResponse;
 import hirs.attestationca.portal.datatables.OrderedListQueryDataTableAdapter;
@@ -8,26 +9,6 @@ import hirs.attestationca.portal.page.PageController;
 import hirs.attestationca.portal.page.PageMessages;
 import hirs.attestationca.portal.page.params.NoPageParams;
 import hirs.attestationca.portal.util.CertificateStringMapBuilder;
-import java.io.IOException;
-import java.net.URISyntaxException;
-import java.security.cert.CertificateEncodingException;
-import java.security.cert.X509Certificate;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
-import javax.servlet.http.HttpServletResponse;
-import org.apache.logging.log4j.Logger;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Controller;
-import org.springframework.ui.Model;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.servlet.ModelAndView;
-
-import static org.apache.logging.log4j.LogManager.getLogger;
-import org.hibernate.Criteria;
-import org.hibernate.criterion.Restrictions;
-import org.hibernate.sql.JoinType;
-import hirs.FilteredRecordsList;
 import hirs.data.persist.certificate.Certificate;
 import hirs.data.persist.certificate.CertificateAuthorityCredential;
 import hirs.data.persist.certificate.EndorsementCredential;
@@ -38,19 +19,43 @@ import hirs.persist.CriteriaModifier;
 import hirs.persist.CrudManager;
 import hirs.persist.DBManagerException;
 import hirs.persist.OrderedListQuerier;
-import java.util.List;
-import java.util.stream.Collectors;
+import org.apache.logging.log4j.Logger;
+import org.hibernate.Criteria;
+import org.hibernate.criterion.Restrictions;
+import org.hibernate.sql.JoinType;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.MediaType;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.util.StreamUtils;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.ModelAndView;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import org.springframework.web.servlet.view.RedirectView;
 
+import javax.servlet.http.HttpServletResponse;
+import java.io.IOException;
+import java.net.URISyntaxException;
+import java.security.cert.CertificateEncodingException;
+import java.security.cert.X509Certificate;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.stream.Collectors;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
+
+import static org.apache.logging.log4j.LogManager.getLogger;
+
 /**
- * Controller for the Device page.
+ * Controller for the Certificates list all pages.
  */
 @Controller
 @RequestMapping("/certificate-request")
@@ -347,7 +352,6 @@ public class CertificateRequestPageController extends PageController<NoPageParam
             // send a 404 error when invalid certificate
             response.sendError(HttpServletResponse.SC_NOT_FOUND);
         }
-
     }
 
     /**
@@ -370,6 +374,51 @@ public class CertificateRequestPageController extends PageController<NoPageParam
 
         // write cert to output stream
         response.getOutputStream().write(certificateAuthorityCredential.getRawBytes());
+    }
+
+    /**
+     * Handles request to download the cert by writing it to the response stream
+     * for download.
+     *
+     * @param response the response object (needed to update the header with the
+     * file name)
+     * @throws java.io.IOException when writing to response output stream
+     */
+    @RequestMapping(value = "/bulk", method = RequestMethod.GET)
+    public void bulk(final HttpServletResponse response)
+            throws IOException {
+        LOGGER.info("Handling request to download all platform certificates");
+        String fileName = "platform_certificates.zip";
+        String zipFileName;
+
+        // Set filename for download.
+        response.setHeader("Content-Disposition", "attachment;" + fileName);
+        response.setContentType("application/zip");
+
+        try (ZipOutputStream zipOut = new ZipOutputStream(response.getOutputStream())) {
+            // get all files
+            for (PlatformCredential pc : PlatformCredential.select(certificateManager)
+                    .getCertificates()) {
+                zipFileName = String.format("Platform_Certificate[%s].cer",
+                        pc.getPlatformSerial());
+                FileSystemResource fileSystemResource = new FileSystemResource(zipFileName);
+                // configure the zip entry, the properties of the 'file'
+                ZipEntry zipEntry = new ZipEntry(zipFileName);
+                zipEntry.setSize((long) pc.getRawBytes().length * Byte.SIZE);
+                zipEntry.setTime(System.currentTimeMillis());
+                zipOut.putNextEntry(zipEntry);
+                // the content of the resource
+                StreamUtils.copy(pc.getRawBytes(), zipOut);
+                zipOut.closeEntry();
+            }
+            zipOut.finish();
+            // write cert to output stream
+        } catch (IllegalArgumentException ex) {
+            String uuidError = "Failed to parse ID from: ";
+            LOGGER.error(uuidError, ex);
+            // send a 404 error when invalid certificate
+            response.sendError(HttpServletResponse.SC_NOT_FOUND);
+        }
     }
 
     /**
