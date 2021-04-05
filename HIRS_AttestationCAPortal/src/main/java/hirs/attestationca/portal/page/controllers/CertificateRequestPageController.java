@@ -24,7 +24,6 @@ import org.hibernate.Criteria;
 import org.hibernate.criterion.Restrictions;
 import org.hibernate.sql.JoinType;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -392,7 +391,7 @@ public class CertificateRequestPageController extends PageController<NoPageParam
         String zipFileName;
 
         // Set filename for download.
-        response.setHeader("Content-Disposition", "attachment;" + fileName);
+        response.setHeader("Content-Disposition", "attachment; filename=" + fileName);
         response.setContentType("application/zip");
 
         try (ZipOutputStream zipOut = new ZipOutputStream(response.getOutputStream())) {
@@ -401,7 +400,6 @@ public class CertificateRequestPageController extends PageController<NoPageParam
                     .getCertificates()) {
                 zipFileName = String.format("Platform_Certificate[%s].cer",
                         pc.getPlatformSerial());
-                FileSystemResource fileSystemResource = new FileSystemResource(zipFileName);
                 // configure the zip entry, the properties of the 'file'
                 ZipEntry zipEntry = new ZipEntry(zipFileName);
                 zipEntry.setSize((long) pc.getRawBytes().length * Byte.SIZE);
